@@ -1,0 +1,173 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+ "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html>
+<head>
+<meta http-equiv="content-type" content="text/html; charset=iso-8859-1" />
+<title>${project.name}</title>
+
+<script type="text/javascript" src="functions.js"></script>
+<script type="text/javascript" src="scripts/appletloader.js"></script>
+
+<style type="text/css">
+body {
+  margin: 0px 0px 0px 0px;
+  padding: 0px 0px 0px 0px;
+  text-align: center;
+  font-family: verdana, geneva, arial, helvetica, sans-serif; 
+  font-size: 11px; 
+  background-color: white; 
+  text-decoration: none; 
+  font-weight: normal; 
+  line-height: normal;
+}
+ 
+A          { color: #3399CC; text-decoration: none; }
+A:link     { color: #3399CC; text-decoration: none; }
+A:visited  { color: #3399CC; text-decoration: none; }
+A:active   { color: #3399CC; text-decoration: underline; }
+A:hover    { color: #3399CC; text-decoration: underline; }
+
+#content {
+  width: 800px;
+  margin: auto;
+}
+
+#content div {
+  margin: auto;
+}
+
+#comments {
+}
+
+input {
+  font-size:12px;
+}
+
+fieldset {
+border: 1px solid black;
+  background:#F0F0F0;
+  margin:auto;
+  text-align:left;
+}
+
+legend {
+  background:white;
+  border:1px solid black;
+  padding:5px;
+}
+
+#treeText,#clipText {
+  width:100%;
+}
+</style>
+
+</head>
+
+<body>
+
+<div id="content">
+
+<div style="float:left;width:400px;margin-right:10px;">
+<fieldset style="text-align:center;margin-top:0px;">
+<legend>${project.name}</legend>
+<div id="sketch" style="margin-top:0px;width:${applet.width}px;height:${applet.height}px;">
+<script type="text/javascript">
+loadApplet("sketch");
+</script>
+</div>
+</fieldset>
+</div>
+
+<div style="margin-left:10px;margin-bottom:10px;">
+<fieldset style="">
+<legend>Paperpile <span style="color:red">New</span></legend>
+<p>
+I'm happy to announce a new open-source citation manager called <strong>Paperpile</strong>,
+based on many of the same principles that led to SyncUThink:
+<ul style="line-height:2;"><li>
+Seamlessly integrate with the Web
+</li>
+<li>
+Simple interface, solid backend
+</li>
+<li>
+<em>You</em> manage <em>Your</em> data
+</li>
+</ul>
+<p>
+We set up a <a href="http://groups.google.com/group/paperpile-alpha">Paperpile-alpha Google Group</a>
+ for interested alpha testers, and you can visit <a href="http://www.paperpile.org/">Paperpile.org</a> to see when a public release becomes available.
+</p>
+<center>
+<strong>Like SyncUThink? <em>Try Paperpile!</em></strong>
+</center>
+</fieldset>
+</div>
+
+<div style="margin-left:10px;">
+<fieldset style="margin-top:10px;">
+<legend>About</legend>
+<strong>SyncUThink</strong> is an automated program for fetching and storing PDFs from your CiteULike library. It does three things with each article in your library:
+<ol>
+<li><strong>Find it.</strong> 
+<p>
+SyncUThink uses a combination of web crawling and some clever regular expressions to find the PDF associated with your article and stores it back in CiteULike.
+</li>
+<li><strong>Sync down.</strong>
+<p>
+SyncUThink can download your PDFs to your computer, for easy offline (or e-book based) reading and annotation. 
+</li>
+<li><strong>Sync up.</strong>
+<p>
+If a file has been modified on your computer, SyncUThink will re-upload the latest version. This way, your PDF annotations will stay up-to-date and backed up on CiteULike.
+</li>
+</ol>
+
+<p>
+Updates:
+<ul>
+<li><strong>2009-11-13:</strong> Fixed a few more bugs where SyncUThink downloaded nonsensical PDFs from publisher websites.
+</li>
+</ul>
+
+
+<p>
+Some other useful info:
+<ul>
+<li><strong>Errors:</strong> if you keep getting errors with certain citations, let me know! You can reach me at gjuggler [at] gmail [dot] com. Specific article ID numbers are helpful, and it would be especially nice to have a copy of the Java console output, if you know how to find that sort of thing.
+</li>
+<br/>
+<li><strong>NoPDF:</strong> if you have articles that you <em>don't</em> want SyncUThink to find PDfs for, then simply add the tag "nopdf" (or any tag containing that word) to the article.
+</li>
+</ul>
+Downloads:
+${internal.downloadshtml}
+</fieldset>
+</div>
+
+<div>
+<fieldset style="margin-top:10px;">
+<legend>More info</legend>
+Created by <a href="http://www.embl-ebi.ac.uk/Information/Staff/person_maintx.php?s_person_id=928">Greg Jordan</a>, Jan 2008.
+<p>
+Libraries used: <a href="http://www.processing.org/">Processing</a> | <a href="http://hc.apache.org/httpclient-3.x/">Apache HttpClient</a> | <a href="http://www.martiansoftware.com/jsap/">JSAP</a>
+<p>
+E-mail me with bug reports or suggestions: gjuggler [at] gmail
+</fieldset>
+
+</div>
+<div style="clear:both;"></div>
+</div>
+
+<script type="text/javascript">
+var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+</script>
+<script type="text/javascript">
+var pageTracker = _gat._getTracker("UA-3446911-1");
+pageTracker._initData();
+pageTracker._trackPageview();
+</script>
+</body>
+</html>

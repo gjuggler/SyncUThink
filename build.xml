@@ -1,0 +1,416 @@
+<!--
+    Ant build script for creating processing applets. Based loosely
+    on Toxi's P5 build script, with many enhancements (and probably a few new bugs).
+    (see http://processing.org/discourse/yabb_beta/YaBB.cgi?board=Integrate;action=display;num=1117133941 )
+    
+    last update : Feb. 2, 2008
+    author : Gregory Jordan (phylowidget@gmail.com)
+    author : Toxi (info@toxi.co.uk)
+-->
+
+<!--
+This Ant task assumes a certain structure within your project directory:
+
+[root]: The main directory. Should contain your build.xml and build.properties files.
+|
+|->[src] : Source code. Pretty self-explanatory; put your source here.
+|->[data]: If your applet uses PApplet.openStream() to access data resources, you'll
+|       want to put your data into this directory. It will ultimately be bundled
+|       up in the JAR file along with all the compiled java classes.
+|->[html]: Here is placed the template HTML file and any other web-related items that
+|       will also end up in the applet directory. See the genHTML task (at the bottom)
+|       to see what will be done to the template in order to create the finished HTML.
+|->[lib] : Place the core.jar file and any other .jar libraries you're using in here.
+   |    These will be copied to the applet directory and referenced from within the
+   |    "archive" attribute of the <applet> tag in the resulting HTML.
+   |->[opengl]: If you wish to enable opengl support, first grab the required .jar files
+             from the Processing distribution and place them in this directory. Last
+             I checked, they were "opengl.jar," "jogl.jar," and a bunch of "jogl-natives-XXX.jar".
+-->
+<project name="Processing Applet Export" default="dist" basedir=".">
+	<description>
+        Processing applet output script.
+		http://processing.org/
+    </description>
+
+	<taskdef resource="net/sf/antcontrib/antcontrib.properties">
+	  <classpath>
+	    <pathelement location="./ant-contrib.jar"/>
+	  </classpath>
+	</taskdef>
+	
+	<target name="init">
+		<!-- Import properties from build.properties -->
+		<property file="build.properties" />
+
+		<!-- Loads the properties DSTAMP, TSTAMP, and TODAY -->
+		<tstamp />
+		
+		<!-- Check if the minimum properties are set, terminate if necessary -->
+		<fail unless="project.name">Please specify a project name in build.properties.</fail>
+		<fail unless="project.safename">Please specify a project safe name in build.properties.</fail>
+		<fail unless="project.class">Please specify a Main class to be called (i.e. org.foo.BarApplication or somesuch).</fail>
+		<fail unless="applet.width">Please specify applet.width in the build.properties file.</fail>
+		<fail unless="applet.height">Please specify applet.height in the build.properties file.</fail>
+
+		<!-- Output debug info if desired. -->
+		<antcall target="outputdebug" />
+
+		<!-- Store folder locations within named properties. -->
+		<property name="src" value="src" />
+		<property name="build" value="build" />
+		<property name="applet" value="applet" />
+		<property name="data" value="data" />
+		<property name="lib" value="lib" />
+		<property name="html" value="html" />
+		<property name="zip" value="zip" />
+
+		<!-- Create properties for the filenames of the final jar, source and standalone .zips -->
+		<property name="internal.finaljar" value="${project.safename}.jar" />
+		<property name="internal.sourcezip" value="${zip}/${project.safename}_src.zip" />
+		<property name="internal.standalonezip" value="${zip}/${project.safename}_standalone.zip" />
+		<property name="internal.projectzip" value="${zip}/${project.safename}_project.zip" />
+		<property name="internal.libraryzip" value="${zip}/${project.safename}_library.zip" />
+		
+		<!-- Some behavior-modifying properties -->
+		<property name="internal.overwrite" value="true" />
+		
+		<!-- Create some conditional properties based on the values specified in build.properties.
+			We need to do this because the "if" parameter of the target definition only responds to 
+			a property being set or not set, NOT the true/false value.
+		-->
+		<condition property="cond.signjar">
+			<istrue value="${signjar}" />
+		</condition>
+		<condition property="cond.genkey">
+			<istrue value="${signjar.genkey}" />
+		</condition>
+		<condition property="cond.standalone">
+			<istrue value="${project.standalone}" />
+		</condition>
+		<condition property="cond.opensource">
+			<istrue value="${project.opensource}" />
+		</condition>
+		<condition property="cond.sourcezip">
+			<istrue value="${project.sourcezip}" />
+		</condition>
+		<condition property="cond.opengl">
+			<istrue value="${project.opengl}" />
+		</condition>
+		<condition property="cond.debug">
+			<istrue value="${build.debug}" />
+		</condition>
+		<available property="cond.dataexists" file="${data}" type="dir" />
+	</target>
+	
+	<!-- TARGET: BUILD -->
+	<target name="build" depends="init" description="compile the source">
+		<if><istrue value="${project.cleanbeforebuild}"/><then>
+		<antcall target="clean"/>
+		</then></if>
+		
+		<mkdir dir="${build}" />
+		
+		<!-- Compile the java code from ${src} into ${build} -->
+		<condition property="internal.javasource" value="${project.javatarget}" else="1.4">
+			<isset property="project.javatarget" />
+		</condition>
+		<javac srcdir="${src}" destdir="${build}" source="${internal.javasource}" target="${internal.javasource}" compiler='modern' fork='yes'>
+			<classpath>
+				<fileset dir="${lib}" />
+			</classpath>
+		</javac>
+		
+		<!-- If "Open Source", copy the .java files into ${build} as well. -->
+		<if><istrue value="${project.sourcezip}"/><then>
+			<copy todir="${build}" overwrite="true">
+				<fileset dir="${src}">
+					<include name="**/*.*" />
+				</fileset>
+			</copy>
+		</then></if>
+	</target>
+
+	<!-- TARGET: DIST -->
+	<target name="dist" depends="build,loadjars" description="generate the distribution">
+		<mkdir dir="${applet}" />
+		<mkdir dir="${applet}/${zip}" />
+		<mkdir dir="${applet}/${lib}" />
+
+		<!-- IF OPEN SOURCE, COPY .JAVA FILES TO THE BUILD FOLDER -->
+		<antcall target="createzips" inheritRefs="true"/>
+
+		<!-- SIGN THIS JAR, IF NECESSARY -->
+		<antcall target="signjar" inheritRefs="true"/>
+		
+		<!-- CREATE THE HTML FILE -->
+		<antcall target="genHTML" inheritRefs="true"/>
+		
+	</target>
+
+	<!-- TARGET: STANDALONE -->
+	<target name="standalone">
+		<!-- Create the Windows-specific .bat file. Requires SEMICOLON-separated jar names. -->
+		<pathconvert pathsep=";" property="temp.pathlist" refid="appletlibsnonatives">
+			<chainedmapper><flattenmapper/><globmapper from="*" to="${lib}/*" /></chainedmapper>
+		</pathconvert>
+		<concat destfile="${applet}/${project.name}.bat">start javaw -cp ${temp.pathlist} processing.core.PApplet ${project.class}</concat>
+		
+		<!-- Create the Unix .sh file. Requires COLON-separated jar names. -->
+		<pathconvert pathsep=":" property="temp.pathlist2" refid="appletlibsnonatives">
+			<chainedmapper><flattenmapper/><globmapper from="*" to="${lib}/*" /></chainedmapper>
+		</pathconvert>
+		<concat destfile="${applet}/${project.name}.sh">java -cp ${temp.pathlist2} processing.core.PApplet ${project.class}</concat>
+	
+		<!-- Zip up the necessary files in the applet directory into the standalone .zip -->
+		<zip destfile="${applet}/${internal.standalonezip}" includes="**/*.jar,**/*.sh,**/*.bat" basedir="${applet}"/>
+		
+		<!-- Delete the .sh and .bat files, from the applet directory (no longer needed). -->
+		<delete>
+			<fileset dir="${applet}">
+				<include name="${project.name}.bat"/>
+				<include name="${project.name}.sh"/>
+			</fileset>
+		</delete>
+	</target>
+	
+	<!-- TARGET: CREATEZIPS -->
+	<target name="createzips">
+		<!-- Create the project .zip first, because the applet directory should, in theory, start out empty. -->
+		<if><istrue value="${project.projectzip}"/><then>
+			<zip destfile="${applet}/${internal.projectzip}" basedir="./" />
+		</then></if>
+		
+		<if><istrue value="${project.sourcezip}"/><then>
+			<zip destfile="${applet}/${internal.sourcezip}" basedir="${src}" />	
+		</then></if>
+		
+		<if><istrue value="${project.standalonezip}"/><then>
+			<antcall target="standalone" inheritRefs="true"/>
+		</then></if>
+		
+		<if><istrue value="${project.libraryzip}"/><then>
+			<mkdir dir="${project.safename}"/>
+			<mkdir dir="${project.safename}/library"/>
+			<copy todir="${project.safename}/library" file="${applet}/${lib}/${internal.finaljar}"/>
+			<zip destfile="${applet}/${internal.libraryzip}" includes="${project.safename}/**/*.*" basedir="."/>
+			<delete dir="${project.safename}" includeemptydirs="true"/>
+		</then></if>
+		
+	</target>
+
+	<!-- TARGET: SIGNJAR -->
+	<target name="signjar" if="cond.signjar">
+		<!-- Signs the jar files, so that you can get beyond the Applet sandbox with your code if necessary. -->
+		<antcall target="genkey" />
+		<signjar alias="${signjar.alias}" storepass="${signjar.storepass}" lazy="true">
+			<fileset refid="appletlibsnonatives" />
+			<!-- <fileset file="${applet}/${internal.finaljar}" /> -->
+		</signjar>
+	</target>
+
+	<!-- TARGET: GENKEY -->
+	<target name="genkey" if="cond.genkey">
+		<genkey alias="${signjar.alias}" storepass="${signjar.storepass}">
+			<dname>
+				<param name="CN" value="${signjar.cn}" />
+				<param name="OU" value="${signjar.ou}" />
+				<param name="O" value="${signjar.o}" />
+				<param name="C" value="${signjar.c}" />
+			</dname>
+		</genkey>
+	</target>
+
+	<!-- TARGET: GENHTML -->
+	<target name="genHTML">
+
+	<!-- If using OpenGL, set the launcherClass to com.sun.opengl.util.JOGLAppletLauncher. -->
+		<condition property="internal.launcherClass" value="com.sun.opengl.util.JOGLAppletLauncher" else="${project.class}">
+			<istrue value="${project.opengl}" />
+		</condition>
+		<echo>${internal.launcherClass}</echo>
+		
+	<!-- If the applet.comments refers to a valid filename, load it up. -->
+		<loadfile property="internal.appletcomments" srcFile="${html.comments}" failonerror="false" />
+		<condition property="internal.appletcomments" value="${internal.appletcomments}" else="${html.comments}">
+			<isset property="${internal.appletcomments}" />
+		</condition>
+
+	<!-- If we are standalone or open source, create the necessary HTML links. -->
+		<echo file="${applet}/temp.html">
+			<![CDATA[
+			<ul>
+			]]>
+		</echo>
+		<if><istrue value="${project.sourcezip}"/><then>
+			<echo file="${applet}/temp.html" append="true">
+				<![CDATA[	
+				<li><a href="${internal.sourcezip}">Download source</a></li>
+				]]>
+			</echo>
+		</then></if>
+		<if><istrue value="${project.projectzip}"/><then>
+			<echo file="${applet}/temp.html" append="true">
+				<![CDATA[	
+				<li><a href="${internal.projectzip}">Download complete project</a></li>
+				]]>
+			</echo>
+		</then></if>
+
+		<if><istrue value="${project.standalonezip}"/><then>
+			<echo file="${applet}/temp.html" append="true">
+				<![CDATA[	
+				<li><a href="${internal.standalonezip}">Download offline version</a></li>
+				]]>
+			</echo>
+		</then></if>
+		<if><istrue value="${project.libraryzip}"/><then>
+			<echo file="${applet}/temp.html" append="true">
+				<![CDATA[	
+				<li><a href="${internal.libraryzip}">Download as a Processing library</a></li>
+				]]>
+			</echo>
+		</then></if>				
+		<echo file="${applet}/temp.html" append="true">
+			<![CDATA[
+			</ul>
+			]]>
+		</echo>
+		<loadfile srcFile="${applet}/temp.html" property="internal.downloadshtml"/>
+		<delete quiet="true">
+			<fileset dir="${applet}" includes="temp.html"/>
+		</delete>
+		
+	<!-- Let's be a little sneaky here: we expand out the current set
+	of properties, and use the <filterchain> to automatically replace
+	the property names (i.e. applet.width) with the values (i.e. 400)
+	within all html files that we're copying. -->
+		<copy todir="${applet}" overwrite="${internal.overwrite}">
+			<fileset dir="${html}">
+				<patternset id="only.html.files">
+					<include name="**/*.html" />
+					<include name="**/*.php" />
+					<include name="**/*.js" />
+					<include name="**/*.css" />
+				</patternset>
+			</fileset>
+			<filterchain>
+				<expandproperties />
+			</filterchain>
+		</copy>
+		
+		<!-- Copy all non-HTML files normally.
+			This will copy the .gif,.js, etc. etc .files from /html to /applet. -->
+		<copy todir="${applet}" overwrite="${internal.overwrite}">
+			<fileset dir="${html}">
+				<exclude name="**/*.html" />
+				<exclude name="**/*.php" />
+				<exclude name="**/*.js" />
+				<exclude name="**/*.css" />
+			</fileset>
+		</copy>
+		
+	</target>
+
+	<!-- TARGET: CLEAN -->
+	<target name="clean">
+		<delete includeemptydirs="false" quiet="true">
+			<fileset dir="${applet}" includes="" />
+		</delete>
+		<delete includeemptydirs="true" quiet="true">
+			<fileset dir="${build}" includes="" />
+		</delete>
+	</target>
+
+	<target name="loadjars">
+		<!-- Create a fileset that includes all the library jar files. -->
+		<condition property="internal.includeopengl" value="opengl/*.jar" else="NOTHING">
+			<istrue value="${project.opengl}" />
+		</condition>
+		<fileset id="libFiles" dir="" casesensitive="no">
+			<include name="${lib}/*.jar" />
+			<include name="${lib}/${internal.includeopengl}" />
+		</fileset>
+		
+		<!-- Copy all the jar files from the lib directory into the applet/lib directory. -->
+		<copy todir="${applet}/${lib}" overwrite="${internal.overwrite}">
+			<fileset refid="libFiles"/>
+			<mapper type="flatten"/>
+		</copy>
+		
+		
+		<!-- Copies all the files in the "data" directory to "build/data" directory.
+			Ultimately, this will all end up in the final jar file.
+		-->
+		<copy todir="${build}/data" overwrite="true">
+			<fileset dir="${data}">
+				<include name="**/*.*" />
+			</fileset>
+		</copy>
+		<!-- Jar up the 'build' directory and send to applet/lib -->
+		<jar jarfile="${applet}/${lib}/${internal.finaljar}" basedir="${build}">
+			<manifest>
+				<attribute name="Main-Class" value="${project.class}" />
+			</manifest>
+		</jar>
+
+		<fileset id="appletlibs" dir="${applet}" casesensitive="no">
+			<include name="${lib}/**/*.jar" />
+		</fileset>
+		<fileset id="appletlibsnonatives" dir="${applet}" casesensitive="no">
+			<include name="${lib}/**/*.jar" />
+			<exclude name="**/*natives*" />
+		</fileset>
+		
+		<!-- Create a property that is a comma-separated list of the libFilesNoNatives fileset. -->
+		<pathconvert pathsep="," property="internal.allJars" refid="appletlibsnonatives">
+			<chainedmapper>
+				<flattenmapper/>
+			</chainedmapper>
+		</pathconvert>
+		<pathconvert pathsep="','" property="temp.quotedJarList" refid="appletlibsnonatives">
+			<chainedmapper>
+				<flattenmapper/>
+			</chainedmapper>
+		</pathconvert>
+		<pathconvert pathsep="','" property="temp.quotedPrefixedJarList" refid="appletlibsnonatives">
+					<chainedmapper>
+						<flattenmapper/>
+						<globmapper from="*" to="${lib}/*" />
+					</chainedmapper>
+				</pathconvert>
+		<property name="internal.quotedJars" value="'${temp.quotedJarList}'"/>
+		<property name="internal.quotedPrefixedJars" value="'${temp.quotedPrefixedJarList}'"/>
+		
+	</target>
+
+	<!-- TARGET: UPLOAD -->
+	<target name="upload" depends="dist">
+		<scp todir="${project.serverdest}" trust="true" failonerror="false" verbose="true">
+			<fileset id="allFiles" dir="${applet}" casesensitive="no"/>
+		</scp>
+	</target>
+	
+	<!-- MISCELLANEOUS OR "EXTRA" TARGETS GO HERE -->
+	<!-- **************************************** -->
+
+	<target name="outputdebug" if="cond.debug">
+		<echo>
+		Script Filename:	${ant.file}
+		Project Home:	${basedir}
+						
+		Ant JVM Version:	${ant.java.version}
+		Ant Version:	${ant.version}
+		Ant Home:		${ant.home}
+						
+		Java JVM Version:	${java.vm.version}
+		Java Version:	${java.version}
+		Java Home: 		${java.home}
+					
+		OS Name:		${os.name}
+		OS Version:		${os.version}
+		OS Architecture:	${os.arch}
+	</echo>
+	</target>
+	
+</project>
